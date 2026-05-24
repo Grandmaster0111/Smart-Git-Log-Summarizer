@@ -1,0 +1,49 @@
+name: Auto PR Description
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  describe-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install git-summarizer
+        run: pip install -e .
+
+      - name: Generate PR description
+        id: generate
+        run: |
+          git-summarizer pr \
+            --base "${{ github.base_ref }}" \
+            --raw \
+            --no-ai \
+            > pr_body.txt
+          echo "Generated $(wc -l < pr_body.txt) lines"
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('pr_body.txt', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `<!-- git-summarizer -->\n${body}`,
+            });

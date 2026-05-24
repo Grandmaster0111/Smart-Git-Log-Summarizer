@@ -35,6 +35,12 @@ MODE_INSTRUCTIONS = {
         "weekly engineering update or team newsletter. Lead with a one-sentence highlight of the week. "
         "Group by week, emphasise shipped features and fixed bugs, and keep the tone concise and professional."
     ),
+    "release-notes": (
+        "Rewrite the following raw release notes into a polished, user-friendly release announcement. "
+        "Use plain language — assume the reader is a developer or end-user, not a committer. "
+        "Lead with a one-sentence highlight. Group by What's New, Bug Fixes, and Performance. "
+        "Do not include internal commit hashes or chore/refactor entries."
+    ),
 }
 
 
@@ -43,6 +49,7 @@ def summarize_with_ai(
     mode: str,
     repo_name: str = "",
     model: str = "claude-opus-4-7",
+    extra_context: str = "",
 ) -> str:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -50,10 +57,11 @@ def summarize_with_ai(
 
     instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["changelog"])
     repo_context = f" for the `{repo_name}` repository" if repo_name else ""
-    user_message = (
-        f"{instruction}\n\nRepo{repo_context}:\n\n```\n{plain_text}\n```\n\n"
-        "Respond with only the formatted Markdown — no preamble, no explanation."
-    )
+
+    user_message = f"{instruction}\n\nRepo{repo_context}:\n\n```\n{plain_text}\n```\n"
+    if extra_context:
+        user_message += f"\nAdditional context (diff stats):\n```\n{extra_context}\n```\n"
+    user_message += "\nRespond with only the formatted Markdown — no preamble, no explanation."
 
     try:
         client = anthropic.Anthropic(api_key=api_key)

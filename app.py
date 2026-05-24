@@ -19,7 +19,10 @@ from rich import box
 
 from git_summarizer import __version__
 from git_summarizer.git_parser import parse_commits, get_current_branch, get_repo_name
-from git_summarizer.formatter import format_changelog, format_standup, format_pr, format_digest
+from git_summarizer.formatter import (
+    format_changelog, format_standup, format_pr, format_digest,
+    format_release_notes, format_stats,
+)
 from git_summarizer.ai_summarizer import summarize_with_ai
 from git_summarizer.config import load_config
 
@@ -76,11 +79,13 @@ MODES = {
     "2": ("Standup",         "daily summary of what you shipped"),
     "3": ("Digest",          "week-by-week progress report"),
     "4": ("PR Description",  "current branch vs a base branch"),
+    "5": ("Release Notes",   "user-facing notes (feat, fix, perf only)"),
+    "6": ("Stats",           "contributors, type breakdown, activity chart"),
 }
 
 
 def main_menu() -> str:
-    """Show the mode menu and return the user's choice ('1'–'4' or 'q')."""
+    """Show the mode menu and return the user's choice ('1'–'6' or 'q')."""
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
     table.add_column(style="bold cyan", no_wrap=True)
     table.add_column(style="white")
@@ -95,7 +100,7 @@ def main_menu() -> str:
 
     choice = Prompt.ask(
         "[bold]Choose a mode[/bold]",
-        choices=["1", "2", "3", "4", "q"],
+        choices=["1", "2", "3", "4", "5", "6", "q"],
         show_choices=False,
     )
     return choice
@@ -252,6 +257,67 @@ def run_pr(cfg: dict) -> str | None:
     return _enhance(plain, "pr", repo, repo_name, no_ai)
 
 
+def run_release_notes(cfg: dict) -> str | None:
+    section("Release Notes")
+    repo   = ask_repo(cfg)
+    author = ask_author(cfg)
+    since  = Prompt.ask("  Since [dim](e.g. '1 month ago', '2024-01-01', blank = all)[/dim]", default="")
+    until  = Prompt.ask("  Until [dim](blank = now)[/dim]", default="")
+    ver    = Prompt.ask("  Version tag [dim](e.g. v2.0.0, blank to skip)[/dim]", default="")
+    no_ai  = ask_no_ai(cfg)
+    console.print()
+
+    try:
+        commits = parse_commits(
+            repo_path=repo,
+            since=since or None,
+            until=until or None,
+            author=author,
+        )
+    except RuntimeError as e:
+        error(str(e))
+        return None
+
+    if not commits:
+        warn("No commits found. Try a wider date range.")
+        return None
+
+    repo_name = get_repo_name(repo)
+    period    = f"since {since}" if since else "all history"
+    console.print(f"[dim]Scanning [bold]{repo_name}[/bold] · {len(commits)} commits · {period}[/dim]\n")
+
+    plain = format_release_notes(commits, version=ver or None)
+    return _enhance(plain, "release-notes", repo, repo_name, no_ai)
+
+
+def run_stats(cfg: dict) -> str | None:
+    section("Repository Stats")
+    repo   = ask_repo(cfg)
+    author = ask_author(cfg)
+    since  = Prompt.ask("  Since [dim](e.g. '3 months ago', blank = all history)[/dim]", default="")
+    console.print()
+
+    try:
+        commits = parse_commits(
+            repo_path=repo,
+            since=since or None,
+            author=author,
+        )
+    except RuntimeError as e:
+        error(str(e))
+        return None
+
+    if not commits:
+        warn("No commits found. Try a wider date range.")
+        return None
+
+    repo_name = get_repo_name(repo)
+    period    = f"since {since}" if since else "all history"
+    console.print(f"[dim]Scanning [bold]{repo_name}[/bold] · {len(commits)} commits · {period}[/dim]\n")
+
+    return format_stats(commits)
+
+
 def _enhance(plain: str, mode: str, repo: str, repo_name: str, no_ai: bool) -> str:
     if no_ai or not os.environ.get("ANTHROPIC_API_KEY"):
         return plain
@@ -338,6 +404,8 @@ MODE_RUNNERS = {
     "2": run_standup,
     "3": run_digest,
     "4": run_pr,
+    "5": run_release_notes,
+    "6": run_stats,
 }
 
 
@@ -372,7 +440,6 @@ def main() -> None:
                     console.print("\n[dim]Bye![/dim]\n")
                     break
             else:
-                # Error or empty — go back to menu after pause
                 console.print()
                 Prompt.ask("[dim]Press Enter to return to the menu[/dim]", default="")
                 current_mode = None

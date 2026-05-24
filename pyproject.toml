@@ -16,6 +16,12 @@ dependencies = [
 [project.scripts]
 git-summarizer = "git_summarizer.cli:cli"
 
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["git_summarizer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

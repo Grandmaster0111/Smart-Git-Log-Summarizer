@@ -23,6 +23,8 @@ class Commit:
     date: datetime
     subject: str
     body: str
+    repo_name: str = ""   # set by parse_commits; used in multi-repo output
+    diff_stat: str = ""   # filled by get_diff_stat when --diff is used
     commit_type: str = field(default="", init=False)
     scope: str = field(default="", init=False)
     breaking: bool = field(default=False, init=False)
@@ -33,6 +35,8 @@ class Commit:
             self.commit_type = match.group("type")
             self.scope = match.group("scope") or ""
             self.breaking = bool(match.group("breaking"))
+            if "BREAKING CHANGE" in self.body:
+                self.breaking = True
         else:
             subject_lower = self.subject.lower()
             if re.match(r'(fix|bug|patch|resolve|revert)', subject_lower):
@@ -103,7 +107,12 @@ def parse_commits(
             return []
         raise RuntimeError(f"git log failed: {stderr}") from e
 
-    return _parse_output(result.stdout)
+    commits = _parse_output(result.stdout)
+    repo_label = get_repo_name(abs_path)
+    for c in commits:
+        c.repo_name = repo_label
+
+    return commits
 
 
 def _parse_output(raw: str) -> list[Commit]:
@@ -127,7 +136,6 @@ def _parse_output(raw: str) -> list[Commit]:
             continue
 
         try:
-            # git's %ai format: 2024-01-15 10:30:00 +0530
             date = datetime.fromisoformat(date_str)
         except ValueError:
             date = datetime.now()
@@ -142,6 +150,49 @@ def _parse_output(raw: str) -> list[Commit]:
         ))
 
     return commits
+
+
+def get_diff_stat(
+    repo_path: str = ".",
+    base_branch: Optional[str] = None,
+    since: Optional[str] = None,
+) -> str:
+    """Return a git diff --stat summary for the given range."""
+    abs_path = os.path.abspath(repo_path)
+    cmd = ["git", "diff", "--stat"]
+
+    if base_branch:
+        cmd.append(f"{base_branch}..HEAD")
+    elif since:
+        try:
+            rev = subprocess.run(
+                ["git", "rev-list", "-1", f"--before={since}", "HEAD"],
+                capture_output=True, text=True, cwd=abs_path, check=True,
+            )
+            since_hash = rev.stdout.strip()
+            if since_hash:
+                cmd.append(f"{since_hash}..HEAD")
+        except subprocess.CalledProcessError:
+            pass
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=abs_path, check=True)
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return ""
+
+
+def git_fetch(repo_path: str = ".") -> None:
+    """Run git fetch quietly; silently ignore errors."""
+    try:
+        subprocess.run(
+            ["git", "fetch", "--quiet"],
+            capture_output=True,
+            cwd=os.path.abspath(repo_path),
+            timeout=30,
+        )
+    except Exception:
+        pass
 
 
 def get_current_branch(repo_path: str = ".") -> str:

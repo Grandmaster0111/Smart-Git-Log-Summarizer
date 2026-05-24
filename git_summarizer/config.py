@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_PATH = Path.home() / ".config" / "git-summarizer" / "config.toml"
+REPO_CONFIG_NAME = ".git-summarizer.toml"
 
 VALID_KEYS: dict[str, type] = {
     "author":  str,
@@ -23,6 +24,26 @@ def load_config() -> dict[str, Any]:
             return tomllib.load(f)
     except Exception:
         return {}
+
+
+def load_repo_config(repo_path: str) -> dict[str, Any]:
+    """Load per-repo config from <repo>/.git-summarizer.toml, if it exists."""
+    candidate = Path(repo_path).expanduser().resolve() / REPO_CONFIG_NAME
+    if not candidate.exists():
+        return {}
+    try:
+        with open(candidate, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return {}
+
+
+def merge_configs(*configs: dict[str, Any]) -> dict[str, Any]:
+    """Merge configs left-to-right; later values win."""
+    merged: dict[str, Any] = {}
+    for cfg in configs:
+        merged.update(cfg)
+    return merged
 
 
 def save_config(cfg: dict[str, Any]) -> None:
@@ -72,13 +93,15 @@ def unset_key(key: str) -> None:
 def build_default_map(cfg: dict[str, Any]) -> dict[str, dict]:
     """Return a Click default_map populated from config file values."""
     shared: dict[str, Any] = {}
-    if "repo"   in cfg: shared["repo"]   = cfg["repo"]
+    if "repo"   in cfg: shared["repo"]   = (cfg["repo"],)   # tuple for multiple=True
     if "author" in cfg: shared["author"] = cfg["author"]
     if "no_ai"  in cfg: shared["no_ai"]  = cfg["no_ai"]
 
     return {
-        "changelog": {**shared},
-        "standup":   {**shared, **({"days":  cfg["days"]}  if "days"  in cfg else {})},
-        "digest":    {**shared, **({"weeks": cfg["weeks"]} if "weeks" in cfg else {})},
-        "pr":        {**shared, **({"base":  cfg["base"]}  if "base"  in cfg else {})},
+        "changelog":     {**shared},
+        "standup":       {**shared, **({"days":  cfg["days"]}  if "days"  in cfg else {})},
+        "digest":        {**shared, **({"weeks": cfg["weeks"]} if "weeks" in cfg else {})},
+        "pr":            {**shared, **({"base":  cfg["base"]}  if "base"  in cfg else {})},
+        "release-notes": {**shared},
+        "stats":         {**shared},
     }
