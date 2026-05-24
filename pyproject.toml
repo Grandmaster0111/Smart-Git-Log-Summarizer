@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-summarizer"
+version = "0.1.0"
+description = "Turn git history into readable changelogs, standups, and PR descriptions."
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "anthropic>=0.40",
+    "rich>=13.0",
+]
+
+[project.scripts]
+git-summarizer = "git_summarizer.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["git_summarizer*"]
