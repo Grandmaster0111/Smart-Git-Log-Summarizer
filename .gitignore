@@ -34,3 +34,6 @@ HANDOVER.md
 # OS
 .DS_Store
 Thumbs.db
+
+# api-tracker fallback queue
+git_summarizer/failed-calls.jsonl

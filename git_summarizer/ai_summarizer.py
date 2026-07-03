@@ -1,6 +1,8 @@
 import os
 import anthropic
 
+from git_summarizer.claude_tracked import create_tracked_client
+
 SYSTEM_PROMPT = """\
 You are an expert technical writer who creates clear, concise, and human-readable git summaries \
 for developers. Your summaries are professional, accurate, and highlight what matters most.
@@ -64,7 +66,7 @@ def summarize_with_ai(
     user_message += "\nRespond with only the formatted Markdown — no preamble, no explanation."
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
+        client = create_tracked_client(source="smart-git-log-summarizer", api_key=api_key)
         response = client.messages.create(
             model=model,
             max_tokens=2048,
